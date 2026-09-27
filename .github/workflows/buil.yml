@@ -1,0 +1,70 @@
+name: Build Uptime Kuma for Termux (armv8l / arm32)
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build-armv8l:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # 1. Cấu hình QEMU để giả lập kiến trúc ARM 32-bit
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      # 2. Biên dịch bên trong Container Debian Node.js ARMv7
+      - name: Build inside ARM32 Container with Compilers
+        uses: addnab/docker-run-action@v3
+        with:
+          image: node:18-bullseye
+          options: --platform linux/arm/v7
+          run: |
+            set -e
+            cd $GITHUB_WORKSPACE
+
+            echo "=== 1. Kiêm tra kiến trúc Container ==="
+            uname -m
+
+            echo "=== 2. Cài đặt ĐỦ BỘ BIÊN DỊCH C/C++ & Build Tools ==="
+            apt-get update -y
+            apt-get install -y --no-install-recommends \
+              build-essential \
+              python3 \
+              make \
+              g++ \
+              gcc \
+              libc6-dev \
+              git
+
+            echo "=== 3. Cài đặt Node Modules & Biên dịch Native Modules ==="
+            npm ci
+
+            echo "=== 4. Build Frontend (Tạo dist/index.html) ==="
+            npm run build
+
+            echo "=== 5. Dọn dẹp devDependencies để tối ưu dung lượng ==="
+            npm prune --production
+
+      # 3. Nén toàn bộ mã nguồn + node_modules đã compiled
+      - name: Compress Build Artifact
+        run: |
+          tar -czf uptime-kuma-armv8l.tar.gz \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='src' \
+            --exclude='test' \
+            --exclude='docs' \
+            .
+
+      # 4. Upload file nén lên GitHub Artifacts
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: uptime-kuma-armv8l
+          path: uptime-kuma-armv8l.tar.gz
+          retention-days: 7
