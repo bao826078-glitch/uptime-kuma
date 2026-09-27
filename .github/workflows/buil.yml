@@ -1,4 +1,4 @@
-name: Build Uptime Kuma directly in Termux Environment
+name: Build Uptime Kuma Native in Termux ARMv7
 
 on:
   push:
@@ -6,64 +6,58 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-termux:
+  build-in-termux:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Clone source code từ GitHub
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      # 2. Giả lập CPU ARM 32-bit cho TX3 Mini
+      # 1. Giả lập kiến trúc ARM 32-bit (armv7/armhf) cho chip TX3 Mini
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
-      # 3. Chạy trực tiếp trong Container Termux Official (ARM32)
-      - name: Build inside Native Termux Container
+      # 2. Chạy trực tiếp trong Container Termux Official
+      - name: Run Termux Environment & Clone Code
         uses: addnab/docker-run-action@v3
         with:
-          image: termux/termux-docker:armv7
+          image: termux/termux-docker:latest
+          options: --platform linux/arm/v7
           run: |
             set -e
-            cd $GITHUB_WORKSPACE
 
-            echo "=== 1. Kiểm tra môi trường Termux ==="
+            echo "=== 1. Kiểm tra môi trường Termux & CPU ==="
             uname -m
 
-            echo "=== 2. Cập nhật Repository & Cài ĐỦ BỘ BIÊN DỊCH Termux (pkg) ==="
+            echo "=== 2. Cập nhật kho gói Termux (pkg) & Cài đặt công cụ ==="
             pkg update -y
-            pkg install -y \
-              nodejs-lts \
-              python \
-              make \
-              clang \
-              binutils \
-              git
+            pkg install -y git nodejs-lts python make clang binutils
 
-            echo "=== 3. Cài đặt Node Modules & Biên dịch Native Modules ==="
+            echo "=== 3. Dùng GIT kéo toàn bộ mã nguồn Uptime Kuma về ==="
+            git clone https://github.com/louislam/uptime-kuma.git /root/uptime-kuma
+            cd /root/uptime-kuma
+
+            echo "=== 4. Cài đặt Dependencies & Build Frontend trong Termux ==="
             npm ci
-
-            echo "=== 4. Build Frontend (Tạo dist/index.html) ==="
             npm run build
 
             echo "=== 5. Dọn dẹp devDependencies để giảm dung lượng ==="
             npm prune --production
 
-      # 4. Nén kết quả đã biên dịch
-      - name: Compress Build Artifact
-        run: |
-          tar -czf uptime-kuma-termux.tar.gz \
-            --exclude='.git' \
-            --exclude='.github' \
-            --exclude='src' \
-            --exclude='test' \
-            --exclude='docs' \
-            .
+            echo "=== 6. Nén thành phẩm đã build xong ==="
+            tar -czf /tmp/uptime-kuma-termux-armv7.tar.gz \
+              --exclude='.git' \
+              --exclude='src' \
+              --exclude='test' \
+              .
 
-      # 5. Tải file nén lên Artifacts
+      # 3. Trích xuất file nén từ Docker container ra ngoài Runner
+      - name: Extract Artifact
+        run: |
+          CONTAINER_ID=$(docker ps -a --filter "ancestor=termux/termux-docker:latest" --format "{{.ID}}" | head -n 1)
+          docker cp $CONTAINER_ID:/tmp/uptime-kuma-termux-armv7.tar.gz ./uptime-kuma-termux-armv7.tar.gz
+
+      # 4. Upload file thành phẩm lên GitHub Artifacts
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: uptime-kuma-termux
-          path: uptime-kuma-termux.tar.gz
+          name: uptime-kuma-termux-armv7
+          path: uptime-kuma-termux-armv7.tar.gz
           retention-days: 7
