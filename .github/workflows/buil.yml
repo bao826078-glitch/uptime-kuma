@@ -10,15 +10,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1. Tự động kéo (clone) code từ repository về
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # 1. Cấu hình QEMU để giả lập kiến trúc ARM 32-bit
+      # 2. Cấu hình QEMU giả lập ARM 32-bit (armhf/armv7)
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
-      # 2. Biên dịch bên trong Container Debian Node.js ARMv7
-      - name: Build inside ARM32 Container with Compilers
+      # 3. Chạy build trong container Node.js Debian ARM32
+      - name: Build inside ARM32 Container
         uses: addnab/docker-run-action@v3
         with:
           image: node:18-bullseye
@@ -27,19 +28,19 @@ jobs:
             set -e
             cd $GITHUB_WORKSPACE
 
-            echo "=== 1. Kiêm tra kiến trúc Container ==="
+            echo "=== 1. Kiểm tra kiến trúc Container ==="
             uname -m
 
-            echo "=== 2. Cài đặt ĐỦ BỘ BIÊN DỊCH C/C++ & Build Tools ==="
+            echo "=== 2. Cập nhật APT index & Cài đặt bộ biên dịch C/C++ ==="
+            # Cập nhật index mới nhất để tránh lỗi 404
             apt-get update -y
-            apt-get install -y --no-install-recommends \
+            apt-get install -y --no-install-recommends --fix-missing \
               build-essential \
               python3 \
               make \
               g++ \
               gcc \
-              libc6-dev \
-              git
+              libc6-dev
 
             echo "=== 3. Cài đặt Node Modules & Biên dịch Native Modules ==="
             npm ci
@@ -50,7 +51,7 @@ jobs:
             echo "=== 5. Dọn dẹp devDependencies để tối ưu dung lượng ==="
             npm prune --production
 
-      # 3. Nén toàn bộ mã nguồn + node_modules đã compiled
+      # 4. Nén toàn bộ sản phẩm hoàn chỉnh
       - name: Compress Build Artifact
         run: |
           tar -czf uptime-kuma-armv8l.tar.gz \
@@ -61,7 +62,7 @@ jobs:
             --exclude='docs' \
             .
 
-      # 4. Upload file nén lên GitHub Artifacts
+      # 5. Lưu Artifact để tải về
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
